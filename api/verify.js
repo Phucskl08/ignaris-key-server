@@ -1,40 +1,80 @@
 export default function handler(req, res) {
+  const key = req.query.key;
+  const device = req.query.device || "";
+  const origin = req.headers.origin || "";
+  const ip =
+    req.headers["x-forwarded-for"] ||
+    req.socket.remoteAddress ||
+    "unknown";
 
-  const VALID_KEYS = [
-    {
-      key: "IGNARIS-2026-ALPHA",
-      expire: "2026-12-31"
-    },
-    {
-      key: "VIP-TEST-9999",
-      expire: "2027-01-01"
-    }
-  ];
-
-  const { key } = req.query;
-
+  // ❌ thiếu key
   if (!key) {
-    return res.status(400).json({
-      status: "error",
-      message: "missing key"
+    return res.json({ status: "error", message: "missing key" });
+  }
+
+  // 🔒 khóa domain
+  if (
+    origin &&
+    !origin.includes("svippp.pages.dev")
+  ) {
+    return res.json({
+      status: "blocked",
+      reason: "domain"
     });
   }
 
-  const found = VALID_KEYS.find(k => k.key === key);
+  // 🔐 DATABASE GIẢ (RAM)
+  if (!global.KEY_DB) {
+    global.KEY_DB = {
+      "VIP-123": {
+        expire: 1760000000000,
+        device: null
+      },
+      "VIP-456": {
+        expire: 1765000000000,
+        device: null
+      },
+      "NOIRSKY-VIP": {
+        expire: 1890000000000,
+        device: null
+      }
+    };
+  }
 
-  if (!found) {
+  const data = global.KEY_DB[key];
+
+  // ❌ key sai
+  if (!data) {
     return res.json({
       status: "reject",
       reason: "invalid key"
     });
   }
 
-  const now = new Date();
-  const exp = new Date(found.expire);
-
-  if (now > exp) {
+  // ⏰ hết hạn
+  if (Date.now() > data.expire) {
     return res.json({
-      status: "expired",
+      status: "expired"
+    });
+  }
+
+  // 🔐 bind thiết bị
+  if (data.device === null) {
+    data.device = device;
+  } else if (data.device !== device) {
+    return res.json({
+      status: "reject",
+      reason: "device mismatch"
+    });
+  }
+
+  // ✅ hợp lệ
+  return res.json({
+    status: "success",
+    expire: data.expire,
+    ip: ip
+  });
+}      status: "expired",
       expire: found.expire
     });
   }
